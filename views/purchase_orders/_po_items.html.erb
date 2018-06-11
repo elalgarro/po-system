@@ -1,0 +1,65 @@
+<% admin = current_user.system_admin? %>
+
+<table class='table table-striped '>
+	<thead>
+		<th></th>
+		<th> Quantity </th>
+		<th> Item</th>
+		<th> Unit</th>
+		<th> Price</th>
+	</thead>
+	<tbody>
+		<% po_types.each do |po_type| %>
+			<tr>
+				<td colspan='5'>
+					<h2 class="title"><%= po_type.name %> </h2>
+				</td>
+			</tr>
+			<% @company.vendor_products.select{ |vp| vp.supply_type.po_type == po_type }.each do |vp| %>
+			<tr>
+				<% options = defined?(index) ? {index: index} : {} %>
+				<%= simple_fields_for @purchase_order do |pof| %>
+					<%= pof.simple_fields_for "po_items_attributes", PoItem.new, options do |i| %>
+						<td></td>
+						<td>
+							<%= i.input :quantity      , label: false, disabled: vp.whole_sale_price.nil? && !admin? %>
+						</td>
+						<td>
+							<%= vp.supply_type.name %>
+							<%= i.input :id            ,  as: :hidden %>
+							<%= i.input :po_type_id    , input_html: {value: vp.supply_type.po_type_id}    , as: :hidden %>
+							<%= i.input :supply_type_id, input_html: {value: vp.supply_type.id}            , as: :hidden %>
+							<%= i.input :unit_id       , input_html: {value: vp.supply_type.units.first.id}, as: :hidden %>
+							
+						</td>
+						<td>
+								<%= vp.supply_type.units.first.name%>
+						</td>
+						<td>
+							<% if admin %>
+								<%= dollars_text_field( i, :unit_price, value: vp.whole_sale_price ,label: false )%>
+							<% else %>
+							<% blank_price = vp.whole_sale_price.nil? %>
+								<% if blank_price %>
+									<span>
+										please update unit price before ordering
+									</span>
+								<% end %>
+								<%= vp.whole_sale_price %> 
+								<%= i.input :unit_price    , input_html: {value: vp.whole_sale_price}, as: :hidden %>
+							<% end %>
+						</td>
+			</tr>
+			<% end %>
+		<% end %>
+	<% end %>
+	<% end %>
+	</tbody>
+		
+</table>
+
+<style>
+	#new_po_items_wrapper input{ width: 50px; margin-bottom: 0;}
+	#new_po_items_wrapper .control-group { display: inline-block; margin-bottom: 0;}
+	.supply_name{ display: inline-block;}
+</style>

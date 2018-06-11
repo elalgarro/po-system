@@ -1,0 +1,238 @@
+<%= simple_form_for([@project, @purchase_order]) do |f| %>
+  <%= f.input :project_id, as: :hidden %>
+  <%= hidden_field_tag :project_id, @project.id %>
+  <%= hidden_field_tag :bid_id %>
+	
+  <%= f.error_notification %>
+
+	<div class="row-fluid print-width">
+	  <div class="span5">
+			<div class="well">
+		    <% if f.object.new_record? %>
+				<%= f.input :vendor_company_id, collection: @parent_companies %>
+			<% else %>
+				<label>Vendor</label>
+				<div class="controls">
+					<input class="string" id="vendor" name="vendor" size="50" type="text" disabled="true" value="<%= f.object.vendor.name %>">
+				</div>
+			<% end %>
+			<% if f.object.vendor_company_id.blank? %>
+				<%= f.association :vendor_location, collection: [] %>
+			<% else %>
+				<%= f.association :vendor_location, collection: Company.child_vendors( f.object.vendor_company_id ), label_method: :location %>
+			<% end %>
+		    <%= f.input :ordered_from %>
+				
+				<%= f.input :shipping_address_id, collection: @purchase_order.shipping_options, include_blank: true %>
+			</div>
+		</div>
+	  <div class="span7 documents">
+			<div class="well">
+				<%= f.input :po_number, label: "PO Number: #{@project.number}-#{@purchase_order.number}", input_html:{value: @purchase_order.number} %>
+				<%= f.input :po_date, label: "Date", :as => :datepicker, :input_html => {:value => format_date( @purchase_order.po_date )} %>
+		    <%= f.input :payment_type, collection: ["On Account", "Credit Card", "Check/Cash"] %>
+			</div>	
+		</div>
+	</div>
+	<div id="new_po_items_wrapper">
+		
+	</div>
+	<div id="po_items_wrapper">
+		<% if @purchase_order.persisted? %>
+			<%= render( 'edit_po_items', f: f) %>
+		<% end %>
+	</div>
+<% if false %>
+	<div class="row-fluid print-width">
+	  <div class="span12">
+			<div class="well">
+				<% if ProjectsUser.active_on_project( @project).include? current_user %>
+				  <%= f.input :requested_by_signature_id, as: :hidden %>
+				  <%= f.input :requested_by_user_id, collection:  ProjectsUser.active_on_project( @project) %>
+					<%= f.fields_for "requested_by_signature", f.object.requested_by_signature || Signature.new, {builder: SignatureFormBuilder} do |rsig| %>
+						<%= rsig.hidden_field :id %>
+						<%= rsig.signature :signature_json %>
+					<% end %>
+				<% else %>
+					Requested by signature can only be made by active management personnel on this project ( <%=ProjectsUser.active_on_project( @project).collect{|b| b.name}.join(", ")%> )
+				<% end %>
+			</div>
+		</div>
+	</div>
+	
+	<div class="row-fluid print-width">
+	  <div class="span12">
+			<div class="well">
+				<%= f.input :verbal_approve_user_id, collection: User.system_admins %>
+				<%= f.input :verbal_approve_date, :as => :datepicker, :input_html => {:value => format_date( @purchase_order.verbal_approve_date )} %>
+			</div>
+		</div>
+	</div>
+	
+	<div class="row-fluid print-width">
+	  <div class="span12">
+			<div class="well">
+				<% if current_user.has_role? :system_admin %>
+				  <%= f.input :signed_off_signature_id, as: :hidden %>
+			    <%= f.input :signed_off_user_id, collection: User.system_admins %>
+				
+					<%= f.fields_for "signed_off_signature", f.object.signed_off_signature || Signature.new, {builder: SignatureFormBuilder} do |sig| %>
+						<%= sig.hidden_field :id %>
+						<%= sig.signature :signature_json %>
+					<% end %>
+				
+					<%= f.input :signed_off_date, :as => :datepicker, :input_html => {:value => format_date( @purchase_order.signed_off_date )} 
+					%>		
+				<% else %>
+					Sign off signature can only be made by <%= User.bosses.collect{|b| b.name}.join(", ") %>
+				<% end %>
+			</div>
+		</div>
+  </div>
+<% end %>
+
+	<div class='box'>
+		<div class='box-content padded'>
+			<div class='row-fluid'>
+				<%= f.input :notes, input_html: {style:"width: 95%; height: 200px;"} %>
+			</div>
+		</div>
+	</div>
+	
+  <%= render partial: "daily_reports/save", locals:{f:f} %>
+<% end %>
+
+<% if @purchase_order.new_record? %>
+<script type="text/javascript">
+	// Load PO Items
+  console.log('here')
+	$("#purchase_order_vendor_company_id").change( function(){
+    
+		$.ajax({
+			url: '<%= url_for :controller => "purchase_orders", :action => "update_select", :project_id => @project.id %>',
+			data: { company_id: this.value },
+			success: function ( data ) {
+				$("#purchase_order_vendor_location_id").html(data)
+			}
+		});
+		$.ajax({
+			url: '<%= url_for :controller => "purchase_orders", :action => "po_item_row", :project_id => @project.id %>',
+			data: { company_id: $("#purchase_order_vendor_company_id").val() },
+			success: function ( data ) {
+				$("#new_po_items_wrapper").html(data)
+			}
+		});
+	});
+</script>
+<% end %>
+
+<script type="text/javascript" charset="utf-8">
+	// Company Select BOX
+	$("#purchase_order_vendor_company_id").select2({
+		placeholder: "Choose Vendor"
+	}); 
+
+
+	// RELOAD LINE ITEM ROW BASED ON THE SELECTED PO TYPE
+	$("#po_items_wrapper").on('change', 'select.po_type', function(){		
+		var index = this.id.replace("_po_type_id", "").replace("purchase_order_po_items_attributes_", "");
+		if( this.value != "")
+		{
+			$.ajax({
+				url: '<%= url_for :controller => "purchase_orders", :action => "po_item_row", :project_id => @project.id %>',
+				data: { po_type_id: this.value, index: index, company_id: $("#purchase_order_vendor_company_id").val() },
+				success: function ( data ) { 
+					$("#po_item_"+index+"_wrapper").html(data)
+				}
+			});
+		}
+	});
+	
+	// LOAD SUPPLY ITEM AND UNITS SELECT BOXES AFTER CHOOSING SUPPLY TYPE
+	$("#po_items_wrapper").on('change', 'select.supply_type', function(){
+		var supply_item_id = this.id.replace("_supply_type_id", "_supply_item_id");
+		var supply_item_select = $("#"+supply_item_id);
+
+		var units_id = this.id.replace("_supply_type_id", "_unit_id");
+		var units_input = $("#"+units_id);
+
+		var unit_display = $(this).closest(".po_item_wrapper").find(".unit_display")
+		
+		var price_id = this.id.replace("_supply_type_id", "_unit_price");
+		var price_input = $("#"+price_id);
+		
+		supply_item_select.html("<option value=''><i>loading...</i> </option>");
+		// units_select.html("<option value=''><i>loading...</i> </option>");
+		
+		$.ajax({
+			url: '<%= url_for :controller => "purchase_orders", :action => "update_select" %>',
+			data: { supply_type_id: this.value, klass: "SupplyItem" },
+			success: function ( data ) {
+				supply_item_select.html(data);
+				
+				if( !data.includes("option"))
+					supply_item_select.hide()
+				else
+					supply_item_select.show()
+			}
+		});
+		
+		$.ajax({
+			url: '<%= url_for :controller => "purchase_orders", :action => "update_select" %>',
+			data: { supply_type_id: this.value, klass: "Unit" },
+			success: function ( data ) { 
+				units_input.val(data);
+			}
+		});
+		$.ajax({
+			url: '<%= url_for :controller => "purchase_orders", :action => "update_unit_display" %>',
+			data: { supply_type_id: this.value, klass: "Unit" },
+			success: function ( data ) { 
+				unit_display.val(data);
+			}
+		});
+		$.ajax({
+			url: '<%= url_for :controller => "purchase_orders", :action => "update_price" %>',
+			data: { supply_type_id: this.value, company_id: $("#purchase_order_vendor_company_id").val() },
+			success: function ( data ) { 
+				price_input.val(data);
+			}
+		});
+		
+	});
+
+	// SIGNATURES JS
+	$.each($('.signature_wrapper'), function( index, val ) {
+		var value = $(val)
+		var sig_wrapper = value.children(".signature_canvas_wrapper")[0]
+		var sig_field_id = "#" + value.children(".signature_json").attr("id")
+		var sig_clear = value.children(".clear_signature")
+		var sig_complete = value.children(".complete_signature_button")
+	
+	
+		$(sig_wrapper).signature({syncField: sig_field_id});
+
+		if($(sig_field_id).attr("disabled") != undefined)
+			$(sig_wrapper).signature('disable')
+		
+		var canvas = $(sig_wrapper).children("canvas")
+		canvas.attr("height","180")
+		canvas.attr("width","970")		
+	
+		if($(sig_field_id).val() != "")
+			$(sig_wrapper).signature('draw', $(sig_field_id).val())
+	
+		$(sig_clear).click(function() { 
+			if($(this).prev().attr("disabled") == undefined)
+				$(this).prev().prev().signature('clear'); 
+			else
+				alert("Cannot clear disabled signature")
+		});
+		
+		$(sig_complete).click(function() {
+			$(sig_wrapper).signature('disable')
+		});
+		
+	}); 	
+	
+</script>

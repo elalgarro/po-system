@@ -1,0 +1,20 @@
+<% content_for :header do %>
+<div class="area-top clearfix">
+	<div class="work_authorization">
+    <div class="row-fluid">
+      <div class="span12">
+				<%= render 'share/form_header' %>
+			</div>
+		</div>
+    <div class="row-fluid">
+      <div class="span12">
+  				<h4 class="work pull-right">
+						New <%= @purchase_order.title %> - #<%= @purchase_order.long_number %>
+					</h4>
+			</div>
+    </div>
+	</div>
+</div>
+<% end %>
+
+<%= render 'form' %>
